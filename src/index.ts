@@ -50,6 +50,8 @@ app.get(
   }
 );
 
+app.get("/health", (c) => c.json({ status: "OK" }));
+
 serve(
   {
     fetch: app.fetch,
