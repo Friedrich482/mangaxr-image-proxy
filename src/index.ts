@@ -1,48 +1,54 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { validator } from "hono/validator";
+import { fetchImageSchema } from "./schema.js";
+import z from "zod";
 
 const app = new Hono();
 
 app.use("/*", cors());
 
 // Fetch image through VPN
-app.post("/fetch-image", async (c) => {
-  const { imageUrl } = await c.req.json();
+app.get(
+  "/image",
+  validator("query", (value, c) => {
+    const parsed = fetchImageSchema.safeParse(value);
 
-  if (!imageUrl) {
-    return c.json({ error: "imageUrl is required" }, 400);
-  }
-
-  try {
-    const response = await fetch(imageUrl, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        Referer: new URL(imageUrl).origin,
-      },
-    });
-
-    if (!response.ok) {
-      return c.json({
-        error: `Failed to fetch: ${response.statusText}`,
-        statusCode: response.status,
-      });
+    if (!parsed.success) {
+      return c.text(z.prettifyError(parsed.error), 400);
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
-    const contentType = response.headers.get("content-type") || "image/jpeg";
+    return parsed.data;
+  }),
+  async (c) => {
+    const { url: imageUrl } = c.req.valid("query");
 
-    return c.json({
-      data: base64,
-      contentType,
-      size: arrayBuffer.byteLength,
-    });
-  } catch (error) {
-    return c.json({ error: error }, 500);
+    try {
+      const response = await fetch(imageUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          Referer: new URL(imageUrl).origin,
+        },
+      });
+
+      if (!response.ok) {
+        return c.text(`Failed to fetch: ${response.statusText}`);
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const contentType = response.headers.get("content-type") || "image/jpeg";
+
+      return c.body(arrayBuffer, 200, {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400",
+      });
+    } catch (error) {
+      return c.text(`Error: ${error}`, 500);
+    }
   }
-});
+);
 
 serve(
   {
