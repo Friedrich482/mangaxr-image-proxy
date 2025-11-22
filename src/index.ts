@@ -22,7 +22,7 @@ app.get(
     return parsed.data;
   }),
   async (c) => {
-    const { url: imageUrl } = c.req.valid("query");
+    const { imageUrl } = c.req.valid("query");
 
     try {
       const response = await fetch(imageUrl, {
